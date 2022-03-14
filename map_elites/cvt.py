@@ -42,9 +42,12 @@ import numpy as np
 import multiprocessing
 
 # from scipy.spatial import cKDTree : TODO -- faster?
+import wandb
+import time
 from sklearn.neighbors import KDTree
 
 from map_elites import common as cm
+from logger import log, config_wandb
 
 
 
@@ -70,6 +73,7 @@ def __evaluate(t):
     fit, desc = f(z)
     return cm.Species(z, desc, fit)
 
+
 # map-elites algorithm (CVT variant)
 def compute(dim_map, dim_x, f,
             n_niches=1000,
@@ -83,6 +87,9 @@ def compute(dim_map, dim_x, f,
        Format of the logfile: evals archive_size max mean median 5%_percentile, 95%_percentile
 
     """
+    # log hyperparams to wandb
+    config_wandb(batch_size=params['batch_size'], max_evals=max_evals)
+
     # setup the parallel processing pool
     num_cores = multiprocessing.cpu_count()
     pool = multiprocessing.Pool(num_cores)
@@ -99,6 +106,7 @@ def compute(dim_map, dim_x, f,
 
     # main loop
     while (n_evals < max_evals):
+        start_time = time.time()
         to_evaluate = []
         # random initialization
         if len(archive) <= params['random_init'] * n_niches:
@@ -125,18 +133,26 @@ def compute(dim_map, dim_x, f,
         # count evals
         n_evals += len(to_evaluate)
         b_evals += len(to_evaluate)
-
+        fps = len(to_evaluate) / (time.time() - start_time)
+        fps = round(fps, 1)
         # write archive
         if b_evals >= params['dump_period'] and params['dump_period'] != -1:
-            print("[{}/{}]".format(n_evals, int(max_evals)), end=" ", flush=True)
+            # print("[{}/{}]\n".format(n_evals, int(max_evals)), end=" ", flush=True)
             cm.__save_archive(archive, n_evals)
             b_evals = 0
+
+        fit_list = np.array([x.fitness for x in archive.values()])
         # write log
-        if log_file != None:
-            fit_list = np.array([x.fitness for x in archive.values()])
-            log_file.write("{} {} {} {} {} {} {}\n".format(n_evals, len(archive.keys()),
-                    fit_list.max(), np.mean(fit_list), np.median(fit_list),
-                    np.percentile(fit_list, 5), np.percentile(fit_list, 95)))
-            log_file.flush()
+        log.info(f'n_evals: {n_evals}, mean fitness: {np.mean(fit_list)}, median fitness: {np.median(fit_list)}, \
+            5th percentile: {np.percentile(fit_list, 5)}, 95th percentile: {np.percentile(fit_list, 95)}')
+        log.debug(f'FPS: {fps}')
+        wandb.log({
+            "evals": n_evals,
+            "mean fitness": np.mean(fit_list),
+            "median fitness": np.median(fit_list),
+            "5th percentile": np.percentile(fit_list, 5),
+            "95th percentile": np.percentile(fit_list, 95),
+            "fps": fps
+        })
     cm.__save_archive(archive, n_evals)
     return archive

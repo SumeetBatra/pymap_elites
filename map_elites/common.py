@@ -42,6 +42,7 @@ import math
 import numpy as np
 import multiprocessing
 from pathlib import Path
+import os
 import sys
 import random
 from collections import defaultdict
@@ -70,6 +71,9 @@ default_params = \
         "iso_sigma": 0.01,
         "line_sigma": 0.2
     }
+datapath = os.getcwd() + '/archives/'
+if not os.path.exists(datapath):
+    os.mkdir(datapath)
 
 class Species:
     def __init__(self, x, desc, fitness, centroid=None):
@@ -165,7 +169,7 @@ def variation(x, z, params):
     return y
 
 def __centroids_filename(k, dim):
-    return 'centroids_' + str(k) + '_' + str(dim) + '.dat'
+    return datapath + 'centroids_' + str(k) + '_' + str(dim) + '.dat'
 
 
 def __write_centroids(centroids):
@@ -215,7 +219,7 @@ def __save_archive(archive, gen):
     def write_array(a, f):
         for i in a:
             f.write(str(i) + ' ')
-    filename = 'archive_' + str(gen) + '.dat'
+    filename = datapath + str(gen) + '.dat'
     with open(filename, 'w') as f:
         for k in archive.values():
             f.write(str(k.fitness) + ' ')
