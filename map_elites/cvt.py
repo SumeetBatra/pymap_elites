@@ -47,8 +47,7 @@ import time
 from sklearn.neighbors import KDTree
 
 from map_elites import common as cm
-from logger import log, config_wandb
-
+from utils.logger import log, config_wandb
 
 
 def __add_to_archive(s, centroid, archive, kdt):
@@ -85,7 +84,8 @@ def compute(dim_map, dim_x, f,
        Vassiliades V, Chatzilygeroudis K, Mouret JB. Using centroidal voronoi tessellations to scale up the multidimensional archive of phenotypic elites algorithm. IEEE Transactions on Evolutionary Computation. 2017 Aug 3;22(4):623-30.
 
        Format of the logfile: evals archive_size max mean median 5%_percentile, 95%_percentile
-
+        dim_map: dimensionality of the map. Ex. % time contact w/ ground of 4 legs = 4 dims, etc
+        dim_x: dimensionality of the behavior descriptor
     """
     # log hyperparams to wandb
     config_wandb(batch_size=params['batch_size'], max_evals=max_evals)

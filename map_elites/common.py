@@ -184,6 +184,11 @@ def __write_centroids(centroids):
 
 
 def cvt(k, dim, samples, cvt_use_cache=True):
+    '''
+    Compute k approximate central voronoi tessellations using kmeans algorithm
+    param k: number of centroids
+    param dim: dimensions of the map
+    '''
     # check if we have cached values
     fname = __centroids_filename(k, dim)
     if cvt_use_cache:
