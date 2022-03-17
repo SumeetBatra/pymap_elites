@@ -218,17 +218,19 @@ def parallel_eval(evaluate_function, to_evaluate, pool, params):
         s_list = map(evaluate_function, to_evaluate)
     return list(s_list)
 
-# format: fitness, centroid, desc, genome \n
-# fitness, centroid, desc and x are vectors
-def __save_archive(archive, gen):
+# format: fitness, centroid, desc,
+# fitness, centroid, desc and are vectors
+def save_archive(archive, gen, archive_name, save_path, save_models=False):
     def write_array(a, f):
         for i in a:
             f.write(str(i) + ' ')
-    filename = datapath + str(gen) + '.dat'
+    filename = f"{save_path}/archive_{archive_name}_" + str(gen) + '.dat'
     with open(filename, 'w') as f:
         for k in archive.values():
             f.write(str(k.fitness) + ' ')
             write_array(k.centroid, f)
-            write_array(k.desc, f)
-            write_array(k.x, f)
+            write_array(k.phenotype, f)
+            f.write(str(k.genotype.id) + ' ')
             f.write("\n")
+            if save_models:
+                k.phenotype.save(f"{save_path}/{archive_name}_actor_" + str(k.x.id))

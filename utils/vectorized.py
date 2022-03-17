@@ -40,20 +40,19 @@ def parallel_worker(process_id,
                 done = False
                 # eval loop
                 obs_arr, rew_arr, dones_arr = [], [], []
-                rewards, steps = 0, 0
-                while not done:
+                rewards, info = 0, None
+                while True:
                     # TODO: evaluate the actor
                     action = env.action_space.sample()
-                    obs, rew, done, _ = env.step(action)
+                    obs, rew, done, info = env.step(action)
                     obs_arr.append(obs)
                     rew_arr.append(rew)
                     dones_arr.append(done)
                     rewards += rew
-                    steps += 1
                 log.debug("Loop ran successfully")
-                eval_out_queue.put((idx, (rewards, steps)))
+                eval_out_queue.put((idx, (rewards, env.ep_length, info['desc'])))
             except BaseException:
-                log.error("Error in vectorized.py: loop did not run successfully. Either there was a keyboard interrupt or there is a bug in the while loop")
+                pass
             if close_processes.is_set():
                 log.debug(f'Close Eval Process nr. {process_id}')
                 # remote.send((process_id, env.))
@@ -99,16 +98,18 @@ class ParallelEnv(object):
         results = [None] * len(actors)
         for idx, actor in enumerate(actors):
             self.eval_id += 1
-            self.eval_in_queue.put((idx, actor, self.eval_id, eval_mode))
-        # TODO: fix this for loop
-        # for _ in range(len(actors)):
-        #     idx, res = self.eval_out_queue.get(True)
-        #     self.steps += res[1]
-        #     results[idx] = res
+            self.eval_in_queue.put((idx, actor, self.eval_id, eval_mode), block=True, timeout=1e9)  # faster-fifo queue is 10s timeout by default
+        for _ in range(len(actors)):
+            idx, res = self.eval_out_queue.get(True, timeout=1e9)  # faster-fifo queue is 10s timeout by default
+            self.steps += res[1]
+            results[idx] = res
         return results
 
     def update_archive(self, archive):
         self.locals[-1].send(archive)
+
+    def get_actors(self):
+        pass
 
     def close(self):
         self.close_processes.set()
