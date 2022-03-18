@@ -104,6 +104,7 @@ def compute_nn(cfg,
     archive = {}  # init archive (empty)
     n_evals = 0  # number of evaluations since the beginning
     b_evals = 0  # number evaluation since the last dump
+    steps = 0  # env steps
 
     # main loop
     while (n_evals < max_evals):
@@ -112,7 +113,7 @@ def compute_nn(cfg,
         # random initialization
         if len(archive) <= cfg['random_init']:  # initialize a |random_init| number of actors
             log.debug("Initializing the neural network actors' weights from scratch")
-            for i in range(0, cfg['random_init_batch']):
+            for i in range(0, cfg['random_init_batch'] + 1):
                 actor = model_factory(hidden_size=128).to_device(device)
                 to_evaluate += [actor]
         else:  # variation/selection loop
@@ -125,12 +126,14 @@ def compute_nn(cfg,
             to_evaluate += variation_operator(archive, cfg['eval_batch_size'], cfg['proportion_evo'])
 
         log.debug("Evaluating the policies")
+
         # evaluations of the fitness and BD of new batch
         solutions = envs.eval_policy(to_evaluate)
+        frames = sum(sol[1] for sol in solutions)
+        steps += frames
+
         n_evals += len(to_evaluate)
         b_evals += len(to_evaluate)
-        fps = len(to_evaluate) / (time.time() - start_time)
-        fps = round(fps, 1)
         log.debug(f'{n_evals/int(cfg["max_evals"])}')
         # add to archive
         for idx, solution in enumerate(solutions):
@@ -155,109 +158,29 @@ def compute_nn(cfg,
             cm.save_archive(archive, n_evals, filename, save_path)
             b_evals = 0
 
+        eps = round(len(to_evaluate) / (time.time() - start_time), 1)
+        fps = round(frames / (time.time() - start_time), 1)
+
         # logging
         fit_list = np.array([x.fitness for x in archive.values()])
         # write log
         log.info(f'n_evals: {n_evals}, mean fitness: {np.mean(fit_list)}, median fitness: {np.median(fit_list)}, \
             5th percentile: {np.percentile(fit_list, 5)}, 95th percentile: {np.percentile(fit_list, 95)}')
-        log.debug(f'FPS: {fps}')
+        log.debug(f'Evals/sec (EPS): {eps}, FPS: {fps}, steps: {steps}')
         wandb.log({
             "evals": n_evals,
             "mean fitness": np.mean(fit_list),
             "median fitness": np.median(fit_list),
             "5th percentile": np.percentile(fit_list, 5),
             "95th percentile": np.percentile(fit_list, 95),
-            "fps": fps
+            "evals/sec (Eps)": eps,
+            "fps": fps,
+            "env steps": steps
         })
 
     cm.save_archive(archive, n_evals, filename, save_path, save_models=True)
     envs.close()
 
-
-# map-elites algorithm (CVT variant)
-def compute(dim_map, dim_x, f,
-            n_niches=1000,
-            max_evals=1e5,
-            params=cm.default_params,
-            log_file=None,
-            variation_operator=cm.variation):
-    """CVT MAP-Elites
-       Vassiliades V, Chatzilygeroudis K, Mouret JB. Using centroidal voronoi tessellations to scale up the multidimensional archive of phenotypic elites algorithm. IEEE Transactions on Evolutionary Computation. 2017 Aug 3;22(4):623-30.
-
-       Format of the logfile: evals archive_size max mean median 5%_percentile, 95%_percentile
-        dim_map: dimensionality of the map. Ex. % time contact w/ ground of 4 legs = 4 dims, etc
-        dim_x: dimensionality of the behavior descriptor
-        f: the environment which returns a fitness and behavior descriptor
-    """
-    # log hyperparams to wandb
-    config_wandb(batch_size=params['batch_size'], max_evals=max_evals)
-
-    # setup the parallel processing pool
-    num_cores = multiprocessing.cpu_count()
-    pool = multiprocessing.Pool(num_cores)
-
-    # create the CVT
-    c = cm.cvt(n_niches, dim_map,
-              params['cvt_samples'], params['cvt_use_cache'])
-    kdt = KDTree(c, leaf_size=30, metric='euclidean')
-    cm.__write_centroids(c)
-
-    archive = {} # init archive (empty)
-    n_evals = 0 # number of evaluations since the beginning
-    b_evals = 0 # number evaluation since the last dump
-
-    # main loop
-    while (n_evals < max_evals):
-        start_time = time.time()
-        to_evaluate = []
-        # random initialization
-        if len(archive) <= params['random_init'] * n_niches:
-            for i in range(0, params['random_init_batch']):
-                x = np.random.uniform(low=params['min'], high=params['max'], size=dim_x)
-                to_evaluate += [(x, f)]
-        else:  # variation/selection loop
-            keys = list(archive.keys())
-            # we select all the parents at the same time because randint is slow
-            rand1 = np.random.randint(len(keys), size=params['batch_size'])
-            rand2 = np.random.randint(len(keys), size=params['batch_size'])
-            for n in range(0, params['batch_size']):
-                # parent selection
-                x = archive[keys[rand1[n]]]
-                y = archive[keys[rand2[n]]]
-                # copy & add variation
-                z = variation_operator(x.x, y.x, params)
-                to_evaluate += [(z, f)]
-        # evaluation of the fitness for to_evaluate
-        s_list = cm.parallel_eval(__evaluate, to_evaluate, pool, params)
-        # natural selection
-        for s in s_list:
-            __add_to_archive(s, s.desc, archive, kdt)
-        # count evals
-        n_evals += len(to_evaluate)
-        b_evals += len(to_evaluate)
-        fps = len(to_evaluate) / (time.time() - start_time)
-        fps = round(fps, 1)
-        # write archive
-        if b_evals >= params['dump_period'] and params['dump_period'] != -1:
-            # print("[{}/{}]\n".format(n_evals, int(max_evals)), end=" ", flush=True)
-            # cm.__save_archive(archive, n_evals)
-            b_evals = 0
-
-        fit_list = np.array([x.fitness for x in archive.values()])
-        # write log
-        log.info(f'n_evals: {n_evals}, mean fitness: {np.mean(fit_list)}, median fitness: {np.median(fit_list)}, \
-            5th percentile: {np.percentile(fit_list, 5)}, 95th percentile: {np.percentile(fit_list, 95)}')
-        log.debug(f'FPS: {fps}')
-        wandb.log({
-            "evals": n_evals,
-            "mean fitness": np.mean(fit_list),
-            "median fitness": np.median(fit_list),
-            "5th percentile": np.percentile(fit_list, 5),
-            "95th percentile": np.percentile(fit_list, 95),
-            "fps": fps
-        })
-    # cm.__save_archive(archive, n_evals, file_name, save_path)
-    return archive
 
 
 class Individual(object):

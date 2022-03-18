@@ -1,5 +1,5 @@
 import torch
-import sys
+import time
 import cloudpickle
 import pickle
 from faster_fifo import Queue
@@ -55,7 +55,11 @@ def parallel_worker(process_id,
                 pass
             if close_processes.is_set():
                 log.debug(f'Close Eval Process nr. {process_id}')
-                # remote.send((process_id, env.))
+                remote.send(process_id) # TODO: add rng state??
+                env.close()
+                time.sleep(5)
+                break
+
         except KeyboardInterrupt:
             env.close()
             break
@@ -119,7 +123,8 @@ class ParallelEnv(object):
         for p in self.processes:
             p.terminate()
 
-        return [[x[1] for x in sorted(rng_states, key=lambda element: element[0])]]
+        # TODO: get rid of this?
+        # return [[x[1] for x in sorted(rng_states, key=lambda element: element[0])]]
 
 
 class CloudpickleWrapper(object):

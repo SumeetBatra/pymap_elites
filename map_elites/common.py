@@ -226,6 +226,9 @@ def save_archive(archive, gen, archive_name, save_path, save_models=False):
         for i in a:
             f.write(str(i) + ' ')
     filename = f"{save_path}/archive_{archive_name}_" + str(gen) + '.dat'
+    model_path = save_path + '/policies/'
+    if not os.path.exists(model_path):
+        os.mkdir(model_path)
     with open(filename, 'w') as f:
         for k in archive.values():
             f.write(str(k.fitness) + ' ')
@@ -234,4 +237,4 @@ def save_archive(archive, gen, archive_name, save_path, save_models=False):
             f.write(str(k.genotype.id) + ' ')
             f.write("\n")
             if save_models:
-                k.genotype.save(f"{save_path}/{archive_name}_actor_" + str(k.genotype.id))
+                k.genotype.save(model_path + archive_name + '_actor_' + str(k.genotype.id))
