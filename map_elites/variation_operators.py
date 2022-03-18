@@ -16,7 +16,7 @@ from faster_fifo import Queue
 from multiprocessing import Process
 from vectorized import CloudpickleWrapper
 from utils.logger import log
-from models.bipedal_walker_model import BipedalWalkerNN
+from models.bipedal_walker_model import BipedalWalkerNN, device
 
 
 class VariationOperator(object):
@@ -105,11 +105,11 @@ class VariationOperator(object):
         for n in range(len(actors_x_evo)):
             if self.crossover_op:
                 if self.mutation_op:
-                    actors_z += [self.evo(actors_x_evo[n].x, actors_y_evo[n].x, self.crossover_op, self.mutation_op)]
+                    actors_z += [self.evo(actors_x_evo[n].genotype, actors_y_evo[n].genotype, self.crossover_op, self.mutation_op)]
                 else:
-                    actors_z += [self.evo(actors_x_evo[n].x, actors_y_evo[n].x, self.crossover_op)]
+                    actors_z += [self.evo(actors_x_evo[n].genotype, actors_y_evo[n].genotype, self.crossover_op)]
             elif self.mutation_op:
-                actors_z += [self.evo(actors_x_evo[n].x, False, False, self.mutation_op)]
+                actors_z += [self.evo(actors_x_evo[n].genotype, False, False, self.mutation_op)]
 
         return actors_z
 
@@ -293,7 +293,7 @@ class VariationOperator(object):
         y = x.clone()
         m = torch.rand_like(y)
         index = torch.where(m < self.mutation_rate)
-        delta = torch.zeros(index[0].shape).normal_(mean=0, std=self.sigma)
+        delta = torch.zeros(index[0].shape).normal_(mean=0, std=self.sigma).to(device)
         if len(y.shape) == 1:
             y[index[0]] += delta
         else:

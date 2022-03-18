@@ -1,3 +1,4 @@
+import multiprocessing
 import os.path
 
 import gym
@@ -8,12 +9,12 @@ from functools import partial
 import torch
 import numpy as np
 
-from models.bipedal_walker_model import BipedalWalkerNN
+from models.bipedal_walker_model import BipedalWalkerNN, device
 from utils.vectorized import ParallelEnv
-from utils.logger import log
+from utils.logger import log, config_wandb
 from wrappers.BDWrapper import BDWrapper
 from map_elites.variation_operators import VariationOperator
-
+from map_elites.cvt import compute_nn
 
 
 # CLI args
@@ -32,11 +33,11 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_workers', type=int, default=-1, help='# of cores to use. -1 means use all cores')
     parser.add_argument('--seed', type=int, default=0, help='seed')
+    parser.add_argument('--n_niches', type=int, default=1296, help='number of niches/cells of behavior')
     parser.add_argument('--cvt_samples', type=int, default=25000, help='# of samples for computing cvt clusters. Larger value --> higher quality CVT')
     parser.add_argument('--batch_size', type=int, default=100, help='batch evaluations')
-    parser.add_argument('--random_init', type=float, default=0.1, help='proportion of niches to be filled before starting')
+    parser.add_argument('--random_init', type=int, default=500, help='Number of random evaluations to initialize G')
     parser.add_argument('--random_init_batch', type=int, default=100, help='batch for random initialization')
-    parser.add_argument('--dump_period', type=int, default=10000, help='how often to write results (one generation = one batch)')
     parser.add_argument('--cvt_use_cache', type=str2bool, default=True, help='do we cache results of CVT and reuse?')
     parser.add_argument('--max_evals', type=int, default=1e6, help='Total number of evaluations to perform')
     parser.add_argument('--save_path', default='./', type=str, help='path where to save results')
@@ -73,15 +74,33 @@ def make_env(env_name='BipedalWalker-v3'):
     return env
 
 
-def model_factory(hidden_size=256, init_type='xavier_uniform'):
-    model = BipedalWalkerNN(hidden_size=hidden_size, init_type=init_type)
-    model.apply(model.init_weights)
-    return model
-
-
 def main():
+    try:
+        multiprocessing.set_start_method('spawn', force=True)  # cuda only works with this method
+    except RuntimeError:
+        log.error("Cannot set mp start method to 'spawn'")
+
     args = parse_args()
     cfg = vars(args)
+
+    # log hyperparams to wandb
+    config_wandb(batch_size=cfg['batch_size'], max_evals=cfg['max_evals'])
+
+    # get process num_workers input
+    num_cores = multiprocessing.cpu_count()
+    num_workers = cfg['num_workers']
+    if num_workers == -1: num_workers = num_cores
+    assert num_workers <= num_cores, '--num_workers must be less than or equal to the number of cores on your machine. Multiple workers per cpu are currently not supported'
+    cfg['num_workers'] = num_workers  # for printing the cfg vars  
+
+    # set up factory function to launch parallel environments
+    env_fns = [partial(make_env) for _ in range(num_workers)]
+    envs = ParallelEnv(
+        env_fns,
+        cfg['batch_size'],
+        cfg['random_init'],
+        cfg['seed']
+    )
     # make folders
     if not os.path.exists(cfg['save_path']):
         os.mkdir(cfg['save_path'])
@@ -99,16 +118,8 @@ def main():
     torch.manual_seed(cfg['seed'])
     np.random.seed(cfg['seed'])
 
-    # set up factory function to launch parallel environments
-    env_fns = [partial(make_env) for _ in range(cfg['num_workers'])]
-    envs = ParallelEnv(
-        env_fns,
-        cfg['batch_size'],
-        cfg['random_init'],
-        cfg['seed']
-    )
     # initialize the variation operator (that performs crossovers/mutations)
-    variation_op = VariationOperator(num_cpu=cfg['num_workers'],
+    variation_op = VariationOperator(num_cpu=num_workers,
                                      crossover_op=cfg['crossover_op'],
                                      mutation_op=cfg['mutation_op'],
                                      max_gene=cfg['max_genotype'],
@@ -121,12 +132,16 @@ def main():
                                      max_uniform=cfg['max_uniform'],
                                      iso_sigma=cfg['iso_sigma'],
                                      line_sigma=cfg['line_sigma'])
-    actor = model_factory()
-    while True:
-        try:
-            envs.evaluate_policy([actor])
-        except KeyboardInterrupt:
-            break
+
+    compute_nn(cfg,
+               envs,
+               variation_op,
+               actors_file,
+               filename,
+               cfg['save_path'],
+               n_niches=cfg['n_niches'],
+               max_evals=cfg['max_evals'])
+
     return 1
 
 

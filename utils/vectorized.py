@@ -5,6 +5,7 @@ import pickle
 from faster_fifo import Queue
 from multiprocessing import Process, Event, Pipe
 from logger import log
+from models.bipedal_walker_model import device
 
 
 # adapted from: https://github.com/ollenilsson19/PGA-MAP-Elites/blob/master/vectorized_env.py
@@ -41,15 +42,14 @@ def parallel_worker(process_id,
                 # eval loop
                 obs_arr, rew_arr, dones_arr = [], [], []
                 rewards, info = 0, None
-                while True:
-                    # TODO: evaluate the actor
-                    action = env.action_space.sample()
+                while not done:
+                    obs = torch.from_numpy(obs).to(device)
+                    action = actor(obs).cpu().detach().numpy()
                     obs, rew, done, info = env.step(action)
                     obs_arr.append(obs)
                     rew_arr.append(rew)
                     dones_arr.append(done)
                     rewards += rew
-                log.debug("Loop ran successfully")
                 eval_out_queue.put((idx, (rewards, env.ep_length, info['desc'])))
             except BaseException:
                 pass
@@ -93,7 +93,7 @@ class ParallelEnv(object):
             p.daemon = True
             p.start()
 
-    def evaluate_policy(self, actors, eval_mode=False):
+    def eval_policy(self, actors, eval_mode=False):
         self.steps = 0
         results = [None] * len(actors)
         for idx, actor in enumerate(actors):

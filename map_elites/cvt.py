@@ -46,7 +46,7 @@ import wandb
 import time
 import torch
 from sklearn.neighbors import KDTree
-from models.bipedal_walker_model import BipedalWalkerNN
+from models.bipedal_walker_model import model_factory, device
 from itertools import count
 
 from map_elites import common as cm
@@ -77,11 +77,14 @@ def __evaluate(t):
 
 
 # map-elites algorithm (CVT variant)
-def compute_nn(dim_map, dim_x, f, envs, cfg, actors_file, filename, save_path,
-            n_niches=1000,
-            max_evals=1e5,
-            log_file=None,
-            variation_operator=cm.variation):
+def compute_nn(cfg,
+               envs,
+               variation_operator,
+               actors_file,
+               filename,
+               save_path,
+               n_niches=1000,
+               max_evals=1e5):
     """CVT MAP-Elites
        Vassiliades V, Chatzilygeroudis K, Mouret JB. Using centroidal voronoi tessellations to scale up the multidimensional archive of phenotypic elites algorithm. IEEE Transactions on Evolutionary Computation. 2017 Aug 3;22(4):623-30.
 
@@ -90,18 +93,11 @@ def compute_nn(dim_map, dim_x, f, envs, cfg, actors_file, filename, save_path,
         dim_x: dimensionality of the behavior descriptor
         f: the environment which returns a fitness and behavior descriptor
     """
-    # log hyperparams to wandb
-    config_wandb(batch_size=cfg['batch_size'], max_evals=max_evals)
 
-    # setup the parallel processing pool
-    # TODO: This is probably not needed anymore, since parallelization comes from the ParallelEnv class
-    num_cores = cfg['num_workers']
-    pool = torch.multiprocessing.Pool(num_cores)
 
     # create the CVT
-    cluster_centers = cm.cvt(n_niches, dim_map,
+    cluster_centers = cm.cvt(n_niches, cfg['dim_map'],
                              cfg['cvt_samples'], cfg['cvt_use_cache'])
-    species_centers = cm.cvt(cfg['n_species'])
     kdt = KDTree(cluster_centers, leaf_size=30, metric='euclidean')
     cm.__write_centroids(cluster_centers)
 
@@ -114,23 +110,21 @@ def compute_nn(dim_map, dim_x, f, envs, cfg, actors_file, filename, save_path,
         start_time = time.time()
         to_evaluate = []
         # random initialization
-        if len(archive) <= cfg['random_init'] * n_niches:  # initialize a |random_init| [0,1] percentage of actors
+        if len(archive) <= cfg['random_init']:  # initialize a |random_init| number of actors
             log.debug("Initializing the neural network actors' weights from scratch")
-            actor = BipedalWalkerNN(hidden_size=128)
-            to_evaluate += [actor]
+            for i in range(0, cfg['random_init_batch']):
+                actor = model_factory(hidden_size=128).to_device(device)
+                to_evaluate += [actor]
         else:  # variation/selection loop
             log.debug("Selection/Variation loop of existing actors")
             keys = list(archive.keys())
             # we select all the parents at the same time because randint is slow
             rand1 = np.random.randint(len(keys), size=cfg['batch_size'])
             rand2 = np.random.randint(len(keys), size=cfg['batch_size'])
-            for n in range(0, cfg['batch_size']):
-                # parent selection
-                parent1 = archive[keys][rand1[n]]
-                parent2 = archive[keys][rand2[n]]
-                # copy and add variation
-                to_evaluate += variation_operator(archive, cfg['eval_batch_size'], cfg['proportion_evo'])
+            # copy and add variation
+            to_evaluate += variation_operator(archive, cfg['eval_batch_size'], cfg['proportion_evo'])
 
+        log.debug("Evaluating the policies")
         # evaluations of the fitness and BD of new batch
         solutions = envs.eval_policy(to_evaluate)
         n_evals += len(to_evaluate)
@@ -175,8 +169,10 @@ def compute_nn(dim_map, dim_x, f, envs, cfg, actors_file, filename, save_path,
             "95th percentile": np.percentile(fit_list, 95),
             "fps": fps
         })
-        cm.save_archive(archive, n_evals, filename, save_path, save_models=True)
-        envs.close()
+
+    cm.save_archive(archive, n_evals, filename, save_path, save_models=True)
+    envs.close()
+
 
 # map-elites algorithm (CVT variant)
 def compute(dim_map, dim_x, f,
@@ -244,7 +240,7 @@ def compute(dim_map, dim_x, f,
         # write archive
         if b_evals >= params['dump_period'] and params['dump_period'] != -1:
             # print("[{}/{}]\n".format(n_evals, int(max_evals)), end=" ", flush=True)
-            cm.__save_archive(archive, n_evals)
+            # cm.__save_archive(archive, n_evals)
             b_evals = 0
 
         fit_list = np.array([x.fitness for x in archive.values()])
@@ -260,7 +256,7 @@ def compute(dim_map, dim_x, f,
             "95th percentile": np.percentile(fit_list, 95),
             "fps": fps
         })
-    cm.__save_archive(archive, n_evals, file_name, save_path)
+    # cm.__save_archive(archive, n_evals, file_name, save_path)
     return archive
 
 
@@ -275,8 +271,8 @@ class Individual(object):
         param fitness: the fitness of the model. In the case of a neural network, this is the total accumulated rewards
         param centroid: the closest CVT generator (a behavior) to the behavior that this individual exhibits
         """
-        phenotype.id = next(self._ids)
-        Individual.current_id = phenotype.id  # TODO: not sure what this is for
+        genotype.id = next(self._ids)
+        Individual.current_id = genotype.id  # TODO: not sure what this is for
         self.genotype = genotype
         self.phenotype = phenotype
         self.fitness = fitness

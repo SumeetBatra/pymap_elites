@@ -38,11 +38,10 @@ log.propagate = False  # workaround for duplicated logs in ipython
 log.addHandler(ch)
 log.addHandler(fh)
 
-# wandb initialization
-wandb.init(project='cvt_map_elites', entity='sumeetb12')
-
 
 def config_wandb(**kwargs):
+    # wandb initialization
+    wandb.init(project='cvt_map_elites', entity='sumeetb12')
     cfg = {}
     for key, val in kwargs.items():
         cfg[key] = val
