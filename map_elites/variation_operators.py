@@ -13,8 +13,6 @@ import copy
 import numpy as np
 import torch
 from faster_fifo import Queue
-from multiprocessing import Process
-from vectorized import CloudpickleWrapper
 from utils.logger import log
 from models.bipedal_walker_model import BipedalWalkerNN, device
 
