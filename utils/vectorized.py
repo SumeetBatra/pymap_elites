@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 from faster_fifo import Queue
 from multiprocessing import Process, Event, Pipe
-from logger import log
+from utils.logger import log
 from models.bipedal_walker_model import device
 
 
