@@ -9,7 +9,6 @@ from functools import partial
 import torch
 import numpy as np
 
-from models.bipedal_walker_model import BipedalWalkerNN, device
 from utils.vectorized import ParallelEnv
 from utils.logger import log, config_wandb
 from wrappers.BDWrapper import BDWrapper
@@ -43,6 +42,9 @@ def parse_args(argv=None):
     parser.add_argument('--save_path', default='./', type=str, help='path where to save results')
     parser.add_argument('--dim_map', default=2, type=int, help='Dimensionality of the behavior space. Default is 2 for bipedal walker (obviously)')
     parser.add_argument('--save_period', default=10000, type=int, help='How many evaluations b/w saving archives')
+    parser.add_argument('--keep_checkpoints', default=2, type=int, help='Number of checkpoints of the elites to keep during training')
+    parser.add_argument('--checkpoint_dir', default='./checkpoints', type=str, help='Where to save the checkpoints')
+    parser.add_argument('--cp_save_period', default=1000000, type=int, help='How many evaluations b/w saving checkpoints')
 
     # args for cross over and mutation of agent params
     parser.add_argument('--mutation_op', default=None, type=str, choices=['polynomial_mutation', 'gaussian_mutation', 'uniform_mutation'], help='Type of mutation to perform. Leave as None to do no mutations')
@@ -104,6 +106,8 @@ def main():
     # make folders
     if not os.path.exists(cfg['save_path']):
         os.mkdir(cfg['save_path'])
+    if not os.path.exists(cfg['checkpoint_dir']):
+        os.mkdir(cfg['checkpoint_dir'])
 
     log.debug(f'############## PARAMETERS #########################')
     for key, val in cfg.items():

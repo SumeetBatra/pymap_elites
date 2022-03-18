@@ -237,4 +237,4 @@ def save_archive(archive, gen, archive_name, save_path, save_models=False):
             f.write(str(k.genotype.id) + ' ')
             f.write("\n")
             if save_models:
-                k.genotype.save(model_path + archive_name + '_actor_' + str(k.genotype.id))
+                k.genotype.save(model_path + archive_name + '_actor_' + str(k.genotype.id) + '.pt')

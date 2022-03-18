@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import time
+from models.bipedal_walker_model import BipedalWalkerNN
 
 sigma = np.ones(1000)
 
@@ -30,3 +31,7 @@ if __name__ == '__main__':
     s2 = time.time()
     iso_dd_torch(x, y)
     print(f'torch iso_dd is {(time.time() - s2) / 1000}')
+
+    model = BipedalWalkerNN(hidden_size=128)
+    model.load('./results/policies/CVT-MAP-ELITES_BipedalWalkerV3_seed_0_dim_map_2_actor_5.pt')
+    print(model)

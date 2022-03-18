@@ -44,6 +44,9 @@ import multiprocessing
 # from scipy.spatial import cKDTree : TODO -- faster?
 import wandb
 import time
+import os
+import shutil
+import glob
 import torch
 from sklearn.neighbors import KDTree
 from models.bipedal_walker_model import model_factory, device
@@ -51,6 +54,7 @@ from itertools import count
 
 from map_elites import common as cm
 from utils.logger import log, config_wandb
+from utils.utils import *
 
 
 def __add_to_archive(s, centroid, archive, kdt):
@@ -104,6 +108,7 @@ def compute_nn(cfg,
     archive = {}  # init archive (empty)
     n_evals = 0  # number of evaluations since the beginning
     b_evals = 0  # number evaluation since the last dump
+    cp_evals = 0 # number of evaluations since last checkpoint dump
     steps = 0  # env steps
 
     # main loop
@@ -118,10 +123,6 @@ def compute_nn(cfg,
                 to_evaluate += [actor]
         else:  # variation/selection loop
             log.debug("Selection/Variation loop of existing actors")
-            keys = list(archive.keys())
-            # we select all the parents at the same time because randint is slow
-            rand1 = np.random.randint(len(keys), size=cfg['batch_size'])
-            rand2 = np.random.randint(len(keys), size=cfg['batch_size'])
             # copy and add variation
             to_evaluate += variation_operator(archive, cfg['eval_batch_size'], cfg['proportion_evo'])
 
@@ -134,6 +135,7 @@ def compute_nn(cfg,
 
         n_evals += len(to_evaluate)
         b_evals += len(to_evaluate)
+        cp_evals += len(to_evaluate)
         log.debug(f'{n_evals/int(cfg["max_evals"])}')
         # add to archive
         for idx, solution in enumerate(solutions):
@@ -153,10 +155,15 @@ def compute_nn(cfg,
                                                                        agent.genotype.delta_f))
                 actors_file.flush()
 
-            # save the state of the archive
-        if b_evals >= cfg['save_period'] and cfg['save_period'] != -1:
-            cm.save_archive(archive, n_evals, filename, save_path)
-            b_evals = 0
+        # maybe save a checkpoint
+        if cp_evals >= cfg['cp_save_period'] and cfg['cp_save_period'] != -1:
+            save_checkpoint(archive, n_evals, filename, cfg['checkpoint_dir'], cfg)
+            while len(get_checkpoints(cfg['checkpoint_dir'])) > cfg['keep_checkpoints']:
+                oldest_checkpoint = get_checkpoints(cfg['checkpoint_dir'])[0]
+                if os.path.exists(oldest_checkpoint):
+                    log.debug('Removing %s', oldest_checkpoint)
+                    shutil.rmtree(oldest_checkpoint)
+            cp_evals = 0
 
         eps = round(len(to_evaluate) / (time.time() - start_time), 1)
         fps = round(frames / (time.time() - start_time), 1)
@@ -179,8 +186,8 @@ def compute_nn(cfg,
         })
 
     cm.save_archive(archive, n_evals, filename, save_path, save_models=True)
+    save_cfg(cfg, save_path)
     envs.close()
-
 
 
 class Individual(object):

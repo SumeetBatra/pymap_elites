@@ -2,6 +2,7 @@ import torch
 import time
 import cloudpickle
 import pickle
+import numpy as np
 from faster_fifo import Queue
 from multiprocessing import Process, Event, Pipe
 from logger import log
@@ -54,8 +55,8 @@ def parallel_worker(process_id,
             except BaseException:
                 pass
             if close_processes.is_set():
-                log.debug(f'Close Eval Process nr. {process_id}')
-                remote.send(process_id) # TODO: add rng state??
+                log.debug(f'Close Eval Process id {process_id}')
+                remote.send(process_id)  # TODO: add rng state??
                 env.close()
                 time.sleep(5)
                 break
@@ -71,8 +72,8 @@ class ParallelEnv(object):
         A class for parallel evaluation
         """
         self.n_processes = len(env_fns)
-        self.eval_in_queue = Queue()
-        self.eval_out_queue = Queue()
+        self.eval_in_queue = Queue(max_size_bytes=int(1e7))
+        self.eval_out_queue = Queue(max_size_bytes=int(1e7))
         self.trans_out_queue = Queue()
         self.remotes, self.locals = zip(*[Pipe() for _ in range(self.n_processes + 1)])
         self.global_sync = Event()
@@ -103,6 +104,12 @@ class ParallelEnv(object):
         for idx, actor in enumerate(actors):
             self.eval_id += 1
             self.eval_in_queue.put((idx, actor, self.eval_id, eval_mode), block=True, timeout=1e9)  # faster-fifo queue is 10s timeout by default
+        # EXPERIMENTAL CODE
+        # res = self.eval_out_queue.get_many(True, timeout=1e9)
+        # inds, res = list(zip(*res))
+        # self.steps = sum(r[1] for r in res)
+        # results[list(inds)] = res
+
         for _ in range(len(actors)):
             idx, res = self.eval_out_queue.get(True, timeout=1e9)  # faster-fifo queue is 10s timeout by default
             self.steps += res[1]
