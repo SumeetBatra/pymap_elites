@@ -126,7 +126,7 @@ def compute_nn(cfg,
             # copy and add variation
             to_evaluate += variation_operator(archive, cfg['eval_batch_size'], cfg['proportion_evo'])
 
-        log.debug("Evaluating the policies")
+        log.debug(f"Evaluating {len(to_evaluate)} policies")
 
         # evaluations of the fitness and BD of new batch
         solutions = envs.eval_policy(to_evaluate)
