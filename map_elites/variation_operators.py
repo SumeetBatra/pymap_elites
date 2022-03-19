@@ -140,7 +140,7 @@ class VariationOperator(object):
         actor_z_state_dict = copy.deepcopy(actor_x_state_dict)
         for tensor in actor_x_state_dict:
             if 'weight' or 'bias' in tensor:
-                actor_z_state_dict[tensor] = crossover_op(actor_x_state_dict[tensor], actor_y_state_dict[tensor])
+                actor_z_state_dict[tensor] = crossover_op(actor_x_state_dict[tensor], actor_y_state_dict[tensor]).to(actor_x_state_dict[tensor].device)
         return actor_z_state_dict
 
     def mutation(self, actor_x_state_dict, mutation_op):
@@ -158,7 +158,8 @@ class VariationOperator(object):
         GECCO 2018
         '''
         if x.device != y.device:  # tensors need to be on the same gpu (or both on cpu)
-            y.to(x.device)
+            x = x.cpu()
+            y = y.cpu()
         a = torch.zeros_like(x).normal_(mean=0, std=self.iso_sigma)
         b = np.random.normal(0, self.line_sigma)
         z = x.clone() + a + b * (y - x)
