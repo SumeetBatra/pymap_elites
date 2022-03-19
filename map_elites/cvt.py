@@ -124,7 +124,7 @@ def compute_nn(cfg,
                 actor = model_factory(hidden_size=128, device=device).to(device)
                 log.debug(f'New actor going to gpu {gpu_id}')
                 to_evaluate += [actor]
-                gpu_id = (gpu_id + 1) % (num_gpus - 1)
+                gpu_id = (gpu_id + 1) % num_gpus
         else:  # variation/selection loop
             log.debug("Selection/Variation loop of existing actors")
             # copy and add variation

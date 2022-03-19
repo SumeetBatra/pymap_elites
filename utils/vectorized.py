@@ -43,13 +43,14 @@ def parallel_worker(process_id,
                 obs_arr, rew_arr, dones_arr = [], [], []
                 rewards, info = 0, None
                 while not done:
-                    obs = torch.from_numpy(obs).to(actor.device)
-                    action = actor(obs).cpu().detach().numpy()
-                    obs, rew, done, info = env.step(action)
-                    obs_arr.append(obs)
-                    rew_arr.append(rew)
-                    dones_arr.append(done)
-                    rewards += rew
+                    with torch.no_grad():
+                        obs = torch.from_numpy(obs).to(actor.device)
+                        action = actor(obs).cpu().detach().numpy()
+                        obs, rew, done, info = env.step(action)
+                        obs_arr.append(obs)
+                        rew_arr.append(rew)
+                        dones_arr.append(done)
+                        rewards += rew
                 eval_out_queue.put((idx, (rewards, env.ep_length, info['desc'])))
             except BaseException:
                 pass

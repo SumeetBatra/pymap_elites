@@ -160,14 +160,16 @@ class VariationOperator(object):
         if x.device != y.device:  # tensors need to be on the same gpu (or both on cpu)
             x = x.cpu()
             y = y.cpu()
-        a = torch.zeros_like(x).normal_(mean=0, std=self.iso_sigma)
-        b = np.random.normal(0, self.line_sigma)
-        z = x.clone() + a + b * (y - x)
+        with torch.no_grad():
+            a = torch.zeros_like(x).normal_(mean=0, std=self.iso_sigma)
+            b = np.random.normal(0, self.line_sigma)
+            z = x.clone() + a + b * (y - x)
 
         if not self.max and not self.min:
             return z
         else:
-            return torch.clamp(z, self.min, self.max)
+            with torch.no_grad():
+                return torch.clamp(z, self.min, self.max)
 
     def sbx(self, x, y):
         if not self.max and not self.min:
@@ -183,35 +185,36 @@ class VariationOperator(object):
         creating a `near-parent' solutions and a small value allows
         distant solutions to be selected as offspring.
         '''
-        z = x.clone()
-        c = torch.rand_like(z)
-        index = torch.where(c < self.crossover_rate)
-        r1 = torch.rand(index[0].shape)
-        r2 = torch.rand(index[0].shape)
+        with torch.no_grad():
+            z = x.clone()
+            c = torch.rand_like(z)
+            index = torch.where(c < self.crossover_rate)
+            r1 = torch.rand(index[0].shape)
+            r2 = torch.rand(index[0].shape)
 
-        if len(z.shape) == 1:
-            diff = torch.abs(x[index[0]] - y[index[0]])
-            x1 = torch.min(x[index[0]], y[index[0]])
-            x2 = torch.max(x[index[0]], y[index[0]])
-            z_idx = z[index[0]]
-        else:
-            diff = torch.abs(x[index[0], index[1]] - y[index[0], index[1]])
-            x1 = torch.min(x[index[0], index[1]], y[index[0], index[1]])
-            x2 = torch.max(x[index[0], index[1]], y[index[0], index[1]])
-            z_idx = z[index[0], index[1]]
+            if len(z.shape) == 1:
+                diff = torch.abs(x[index[0]] - y[index[0]])
+                x1 = torch.min(x[index[0]], y[index[0]])
+                x2 = torch.max(x[index[0]], y[index[0]])
+                z_idx = z[index[0]]
+            else:
+                diff = torch.abs(x[index[0], index[1]] - y[index[0], index[1]])
+                x1 = torch.min(x[index[0], index[1]], y[index[0], index[1]])
+                x2 = torch.max(x[index[0], index[1]], y[index[0], index[1]])
+                z_idx = z[index[0], index[1]]
 
-        beta_q = torch.where(r1 <= 0.5, (2.0 * r1) ** (1.0 / (self.eta_c + 1)), (1.0 / (2.0 * (1.0 - r1))) ** (1.0 / (self.eta_c + 1)))
+            beta_q = torch.where(r1 <= 0.5, (2.0 * r1) ** (1.0 / (self.eta_c + 1)), (1.0 / (2.0 * (1.0 - r1))) ** (1.0 / (self.eta_c + 1)))
 
-        c1 = 0.5 * (x1 + x2 - beta_q * (x2 - x1))
-        c2 = 0.5 * (x1 + x2 + beta_q * (x2 - x1))
+            c1 = 0.5 * (x1 + x2 - beta_q * (x2 - x1))
+            c2 = 0.5 * (x1 + x2 + beta_q * (x2 - x1))
 
-        z_mut = torch.where(diff > 1e-15, torch.where(r2 <= 0.5, c2, c1), z_idx)
+            z_mut = torch.where(diff > 1e-15, torch.where(r2 <= 0.5, c2, c1), z_idx)
 
-        if len(y.shape) == 1:
-            z[index[0]] = z_mut
-        else:
-            z[index[0], index[1]] = z_mut
-        return z
+            if len(y.shape) == 1:
+                z[index[0]] = z_mut
+            else:
+                z[index[0], index[1]] = z_mut
+            return z
 
     def __sbx_bounded(self, x, y):
         '''
@@ -220,46 +223,47 @@ class VariationOperator(object):
         creating a `near-parent' solutions and a small value allows
         distant solutions to be selected as offspring.
         '''
-        z = x.clone()
-        c = torch.rand_like(z)
-        index = torch.where(c < self.crossover_rate)
-        r1 = torch.rand(index[0].shape)
-        r2 = torch.rand(index[0].shape)
+        with torch.no_grad():
+            z = x.clone()
+            c = torch.rand_like(z)
+            index = torch.where(c < self.crossover_rate)
+            r1 = torch.rand(index[0].shape)
+            r2 = torch.rand(index[0].shape)
 
-        if len(z.shape) == 1:
-            diff = torch.abs(x[index[0]] - y[index[0]])
-            x1 = torch.min(x[index[0]], y[index[0]])
-            x2 = torch.max(x[index[0]], y[index[0]])
-            z_idx = z[index[0]]
-        else:
-            diff = torch.abs(x[index[0], index[1]] - y[index[0], index[1]])
-            x1 = torch.min(x[index[0], index[1]], y[index[0], index[1]])
-            x2 = torch.max(x[index[0], index[1]], y[index[0], index[1]])
-            z_idx = z[index[0], index[1]]
+            if len(z.shape) == 1:
+                diff = torch.abs(x[index[0]] - y[index[0]])
+                x1 = torch.min(x[index[0]], y[index[0]])
+                x2 = torch.max(x[index[0]], y[index[0]])
+                z_idx = z[index[0]]
+            else:
+                diff = torch.abs(x[index[0], index[1]] - y[index[0], index[1]])
+                x1 = torch.min(x[index[0], index[1]], y[index[0], index[1]])
+                x2 = torch.max(x[index[0], index[1]], y[index[0], index[1]])
+                z_idx = z[index[0], index[1]]
 
 
-        beta = 1.0 + (2.0 * (x1 - self.min) / (x2 - x1))
-        alpha = 2.0 - beta ** - (self.eta_c + 1)
-        beta_q = torch.where(r1 <= (1.0 / alpha), (r1 * alpha) ** (1.0 / (self.eta_c + 1)), (1.0 / (2.0 - r1 * alpha)) ** (1.0 / (self.eta_c + 1)))
+            beta = 1.0 + (2.0 * (x1 - self.min) / (x2 - x1))
+            alpha = 2.0 - beta ** - (self.eta_c + 1)
+            beta_q = torch.where(r1 <= (1.0 / alpha), (r1 * alpha) ** (1.0 / (self.eta_c + 1)), (1.0 / (2.0 - r1 * alpha)) ** (1.0 / (self.eta_c + 1)))
 
-        c1 = 0.5 * (x1 + x2 - beta_q * (x2 - x1))
+            c1 = 0.5 * (x1 + x2 - beta_q * (x2 - x1))
 
-        beta = 1.0 + (2.0 * (self.max - x2) / (x2 - x1))
-        alpha = 2.0 - beta ** - (self.eta_c + 1)
+            beta = 1.0 + (2.0 * (self.max - x2) / (x2 - x1))
+            alpha = 2.0 - beta ** - (self.eta_c + 1)
 
-        beta_q = torch.where(r1 <= (1.0 / alpha), (r1 * alpha) ** (1.0 / (self.eta_c + 1)), (1.0 / (2.0 - r1 * alpha)) ** (1.0 / (self.eta_c + 1)))
-        c2 = 0.5 * (x1 + x2 + beta_q * (x2 - x1))
+            beta_q = torch.where(r1 <= (1.0 / alpha), (r1 * alpha) ** (1.0 / (self.eta_c + 1)), (1.0 / (2.0 - r1 * alpha)) ** (1.0 / (self.eta_c + 1)))
+            c2 = 0.5 * (x1 + x2 + beta_q * (x2 - x1))
 
-        c1 = torch.clamp(c1, self.min, self.max)
-        c2 = torch.clamp(c2, self.min, self.max)
+            c1 = torch.clamp(c1, self.min, self.max)
+            c2 = torch.clamp(c2, self.min, self.max)
 
-        z_mut = torch.where(diff > 1e-15, torch.where(r2 <= 0.5, c2, c1), z_idx)
+            z_mut = torch.where(diff > 1e-15, torch.where(r2 <= 0.5, c2, c1), z_idx)
 
-        if len(y.shape) == 1:
-            z[index[0]] = z_mut
-        else:
-            z[index[0], index[1]] = z_mut
-        return z
+            if len(y.shape) == 1:
+                z[index[0]] = z_mut
+            else:
+                z[index[0], index[1]] = z_mut
+            return z
 
 ################################
 # Mutation Operators ###########
@@ -270,58 +274,61 @@ class VariationOperator(object):
         Cf Deb 2001, p 124 ; param: eta_m
         mutate the params of the agent according to some polynomial
         '''
-        y = x.clone()
-        m = torch.rand_like(y)
-        index = torch.where(m < self.mutation_rate)
-        r = torch.rand(index[0].shape)
-        delta = torch.where(r < 0.5,\
-            (2 * r) ** (1.0 / (self.eta_m + 1.0)) -1.0,\
-                    1.0 - ((2.0 * (1.0 - r)) ** (1.0 / (self.eta_m + 1.0))))
-        if len(y.shape) == 1:
-            y[index[0]] += delta
-        else:
-            y[index[0], index[1]] += delta
+        with torch.no_grad():
+            y = x.clone()
+            m = torch.rand_like(y)
+            index = torch.where(m < self.mutation_rate)
+            r = torch.rand(index[0].shape)
+            delta = torch.where(r < 0.5,\
+                (2 * r) ** (1.0 / (self.eta_m + 1.0)) -1.0,\
+                        1.0 - ((2.0 * (1.0 - r)) ** (1.0 / (self.eta_m + 1.0))))
+            if len(y.shape) == 1:
+                y[index[0]] += delta
+            else:
+                y[index[0], index[1]] += delta
 
-        if not self.max and not self.min:
-            return y
-        else:
-            return torch.clamp(y, self.min, self.max)
+            if not self.max and not self.min:
+                return y
+            else:
+                return torch.clamp(y, self.min, self.max)
 
     def gaussian_mutation(self, x):
         """
         Mutate the params of the agent x according to a gaussian
         """
-        y = x.clone()
-        m = torch.rand_like(y)
-        index = torch.where(m < self.mutation_rate)
-        delta = torch.zeros(index[0].shape).normal_(mean=0, std=self.sigma).to(y.device)
-        if len(y.shape) == 1:
-            y[index[0]] += delta
-        else:
-            y[index[0], index[1]] += delta
+        with torch.no_grad():
+            y = x.clone()
+            m = torch.rand_like(y)
+            index = torch.where(m < self.mutation_rate)
+            delta = torch.zeros(index[0].shape).normal_(mean=0, std=self.sigma).to(y.device)
+            if len(y.shape) == 1:
+                y[index[0]] += delta
+            else:
+                y[index[0], index[1]] += delta
 
-        if not self.max and not self.min:
-            return y
-        else:
-            return torch.clamp(y, self.min, self.max)
+            if not self.max and not self.min:
+                return y
+            else:
+                return torch.clamp(y, self.min, self.max)
 
     def uniform_mutation(self, x):
         """
         Mutate the params of the agent x according to a uniform distribution
         """
-        y = x.clone()
-        m = torch.rand_like(y)
-        index = torch.where(m < self.mutation_rate)
-        delta = torch.zeros(index[0].shape).uniform_(-self.max_uniform, self.max_uniform)
-        if len(y.shape) == 1:
-            y[index[0]] += delta
-        else:
-            y[index[0], index[1]] += delta
+        with torch.no_grad():
+            y = x.clone()
+            m = torch.rand_like(y)
+            index = torch.where(m < self.mutation_rate)
+            delta = torch.zeros(index[0].shape).uniform_(-self.max_uniform, self.max_uniform)
+            if len(y.shape) == 1:
+                y[index[0]] += delta
+            else:
+                y[index[0], index[1]] += delta
 
-        if not self.max and not self.min:
-            return y
-        else:
-            return torch.clamp(y, self.min, self.max)
+            if not self.max and not self.min:
+                return y
+            else:
+                return torch.clamp(y, self.min, self.max)
 
 
 if __name__ == "__main__":
