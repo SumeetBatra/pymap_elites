@@ -45,7 +45,7 @@ def parse_args(argv=None):
     parser.add_argument('--save_period', default=10000, type=int, help='How many evaluations b/w saving archives')
     parser.add_argument('--keep_checkpoints', default=2, type=int, help='Number of checkpoints of the elites to keep during training')
     parser.add_argument('--checkpoint_dir', default='./checkpoints', type=str, help='Where to save the checkpoints')
-    parser.add_argument('--cp_save_period', default=500, type=int, help='How many evaluations b/w saving checkpoints')
+    parser.add_argument('--cp_save_period', default=5000, type=int, help='How many evaluations b/w saving checkpoints')
     parser.add_argument('--num_gpus', default=1, type=int, help='Number of gpus available on your system')
 
     # args for cross over and mutation of agent params
