@@ -157,6 +157,8 @@ class VariationOperator(object):
         Vassiliades V, Mouret JB. Discovering the elite hypervolume by leveraging interspecies correlation.
         GECCO 2018
         '''
+        if x.device != y.device:  # tensors need to be on the same gpu (or both on cpu)
+            y.to(x.device)
         a = torch.zeros_like(x).normal_(mean=0, std=self.iso_sigma)
         b = np.random.normal(0, self.line_sigma)
         z = x.clone() + a + b * (y - x)
