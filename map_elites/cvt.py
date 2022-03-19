@@ -98,7 +98,7 @@ def compute_nn(cfg,
         f: the environment which returns a fitness and behavior descriptor
     """
 
-
+    num_gpus = cfg['num_gpus']
     # create the CVT
     cluster_centers = cm.cvt(n_niches, cfg['dim_map'],
                              cfg['cvt_samples'], cfg['cvt_use_cache'])
@@ -110,6 +110,7 @@ def compute_nn(cfg,
     b_evals = 0  # number evaluation since the last dump
     cp_evals = 0 # number of evaluations since last checkpoint dump
     steps = 0  # env steps
+    gpu_id = 0
 
     # main loop
     while (n_evals < max_evals):
@@ -119,11 +120,11 @@ def compute_nn(cfg,
         if len(archive) <= cfg['random_init']:  # initialize a |random_init| number of actors
             log.debug("Initializing the neural network actors' weights from scratch")
             for i in range(0, cfg['random_init_batch'] + 1):
-                gpu_id = get_least_busy_gpu(cfg['num_gpus'])
                 device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
                 actor = model_factory(hidden_size=128, device=device).to(device)
                 log.debug(f'New actor going to gpu {gpu_id}')
                 to_evaluate += [actor]
+                gpu_id = (gpu_id + 1) % (num_gpus - 1)
         else:  # variation/selection loop
             log.debug("Selection/Variation loop of existing actors")
             # copy and add variation
