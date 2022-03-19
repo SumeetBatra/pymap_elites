@@ -113,81 +113,84 @@ def compute_nn(cfg,
     gpu_id = 0
 
     # main loop
-    while (n_evals < max_evals):
-        start_time = time.time()
-        to_evaluate = []
-        # random initialization
-        if len(archive) <= cfg['random_init']:  # initialize a |random_init| number of actors
-            log.debug("Initializing the neural network actors' weights from scratch")
-            for i in range(0, cfg['random_init_batch'] + 1):
-                device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
-                actor = model_factory(hidden_size=128, device=device).to(device)
-                log.debug(f'New actor going to gpu {gpu_id}')
-                to_evaluate += [actor]
-                gpu_id = (gpu_id + 1) % num_gpus
-        else:  # variation/selection loop
-            log.debug("Selection/Variation loop of existing actors")
-            # copy and add variation
-            to_evaluate += variation_operator(archive, cfg['eval_batch_size'], cfg['proportion_evo'])
+    try:
+        while (n_evals < max_evals):
+            start_time = time.time()
+            to_evaluate = []
+            # random initialization
+            if len(archive) <= cfg['random_init']:  # initialize a |random_init| number of actors
+                log.debug("Initializing the neural network actors' weights from scratch")
+                for i in range(0, cfg['random_init_batch'] + 1):
+                    device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
+                    actor = model_factory(hidden_size=128, device=device).to(device)
+                    log.debug(f'New actor going to gpu {gpu_id}')
+                    to_evaluate += [actor]
+                    gpu_id = (gpu_id + 1) % num_gpus
+            else:  # variation/selection loop
+                log.debug("Selection/Variation loop of existing actors")
+                # copy and add variation
+                to_evaluate += variation_operator(archive, cfg['eval_batch_size'], cfg['proportion_evo'])
 
-        log.debug(f"Evaluating {len(to_evaluate)} policies")
+            log.debug(f"Evaluating {len(to_evaluate)} policies")
 
-        # evaluations of the fitness and BD of new batch
-        solutions = envs.eval_policy(to_evaluate)
-        frames = sum(sol[1] for sol in solutions)
-        steps += frames
+            # evaluations of the fitness and BD of new batch
+            solutions = envs.eval_policy(to_evaluate)
+            frames = sum(sol[1] for sol in solutions)
+            steps += frames
 
-        n_evals += len(to_evaluate)
-        b_evals += len(to_evaluate)
-        cp_evals += len(to_evaluate)
-        log.debug(f'{n_evals/int(cfg["max_evals"])}')
-        # add to archive
-        for idx, solution in enumerate(solutions):
-            # TODO: need to check for if robot is alive?
-            agent = Individual(genotype=to_evaluate[idx], phenotype=solution[2], fitness=solution[0])
-            added = __add_to_archive(agent, agent.phenotype, archive, kdt)
-            if added:
-                actors_file.write("{} {} {} {} {} {} {} {} {} {}\n".format(n_evals,
-                                                                       agent.genotype.id,
-                                                                       agent.fitness,
-                                                                       str(agent.phenotype).strip("[]"),
-                                                                       str(agent.centroid).strip("()"),
-                                                                       agent.genotype.parent_1_id,
-                                                                       agent.genotype.parent_2_id,
-                                                                       agent.genotype.type,
-                                                                       agent.genotype.novel,
-                                                                       agent.genotype.delta_f))
-                actors_file.flush()
+            n_evals += len(to_evaluate)
+            b_evals += len(to_evaluate)
+            cp_evals += len(to_evaluate)
+            log.debug(f'{n_evals/int(cfg["max_evals"])}')
+            # add to archive
+            for idx, solution in enumerate(solutions):
+                # TODO: need to check for if robot is alive?
+                agent = Individual(genotype=to_evaluate[idx], phenotype=solution[2], fitness=solution[0])
+                added = __add_to_archive(agent, agent.phenotype, archive, kdt)
+                if added:
+                    actors_file.write("{} {} {} {} {} {} {} {} {} {}\n".format(n_evals,
+                                                                           agent.genotype.id,
+                                                                           agent.fitness,
+                                                                           str(agent.phenotype).strip("[]"),
+                                                                           str(agent.centroid).strip("()"),
+                                                                           agent.genotype.parent_1_id,
+                                                                           agent.genotype.parent_2_id,
+                                                                           agent.genotype.type,
+                                                                           agent.genotype.novel,
+                                                                           agent.genotype.delta_f))
+                    actors_file.flush()
 
-        # maybe save a checkpoint
-        if cp_evals >= cfg['cp_save_period'] and cfg['cp_save_period'] != -1:
-            save_checkpoint(archive, n_evals, filename, cfg['checkpoint_dir'], cfg)
-            while len(get_checkpoints(cfg['checkpoint_dir'])) > cfg['keep_checkpoints']:
-                oldest_checkpoint = get_checkpoints(cfg['checkpoint_dir'])[0]
-                if os.path.exists(oldest_checkpoint):
-                    log.debug('Removing %s', oldest_checkpoint)
-                    shutil.rmtree(oldest_checkpoint)
-            cp_evals = 0
+            # maybe save a checkpoint
+            if cp_evals >= cfg['cp_save_period'] and cfg['cp_save_period'] != -1:
+                save_checkpoint(archive, n_evals, filename, cfg['checkpoint_dir'], cfg)
+                while len(get_checkpoints(cfg['checkpoint_dir'])) > cfg['keep_checkpoints']:
+                    oldest_checkpoint = get_checkpoints(cfg['checkpoint_dir'])[0]
+                    if os.path.exists(oldest_checkpoint):
+                        log.debug('Removing %s', oldest_checkpoint)
+                        shutil.rmtree(oldest_checkpoint)
+                cp_evals = 0
 
-        eps = round(len(to_evaluate) / (time.time() - start_time), 1)
-        fps = round(frames / (time.time() - start_time), 1)
+            eps = round(len(to_evaluate) / (time.time() - start_time), 1)
+            fps = round(frames / (time.time() - start_time), 1)
 
-        # logging
-        fit_list = np.array([x.fitness for x in archive.values()])
-        # write log
-        log.info(f'n_evals: {n_evals}, mean fitness: {np.mean(fit_list)}, median fitness: {np.median(fit_list)}, \
-            5th percentile: {np.percentile(fit_list, 5)}, 95th percentile: {np.percentile(fit_list, 95)}')
-        log.debug(f'Evals/sec (EPS): {eps}, FPS: {fps}, steps: {steps}')
-        wandb.log({
-            "evals": n_evals,
-            "mean fitness": np.mean(fit_list),
-            "median fitness": np.median(fit_list),
-            "5th percentile": np.percentile(fit_list, 5),
-            "95th percentile": np.percentile(fit_list, 95),
-            "evals/sec (Eps)": eps,
-            "fps": fps,
-            "env steps": steps
-        })
+            # logging
+            fit_list = np.array([x.fitness for x in archive.values()])
+            # write log
+            log.info(f'n_evals: {n_evals}, mean fitness: {np.mean(fit_list)}, median fitness: {np.median(fit_list)}, \
+                5th percentile: {np.percentile(fit_list, 5)}, 95th percentile: {np.percentile(fit_list, 95)}')
+            log.debug(f'Evals/sec (EPS): {eps}, FPS: {fps}, steps: {steps}')
+            wandb.log({
+                "evals": n_evals,
+                "mean fitness": np.mean(fit_list),
+                "median fitness": np.median(fit_list),
+                "5th percentile": np.percentile(fit_list, 5),
+                "95th percentile": np.percentile(fit_list, 95),
+                "evals/sec (Eps)": eps,
+                "fps": fps,
+                "env steps": steps
+            })
+    except KeyboardInterrupt:
+        log.debug('Keyboard interrupt detected. Saving final results')
 
     cm.save_archive(archive, n_evals, filename, save_path, save_models=True)
     save_cfg(cfg, save_path)
