@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from faster_fifo import Queue
 from utils.logger import log
-from models.bipedal_walker_model import BipedalWalkerNN, device
+from models.bipedal_walker_model import BipedalWalkerNN
 
 
 class VariationOperator(object):
@@ -291,7 +291,7 @@ class VariationOperator(object):
         y = x.clone()
         m = torch.rand_like(y)
         index = torch.where(m < self.mutation_rate)
-        delta = torch.zeros(index[0].shape).normal_(mean=0, std=self.sigma).to(device)
+        delta = torch.zeros(index[0].shape).normal_(mean=0, std=self.sigma).to(y.device)
         if len(y.shape) == 1:
             y[index[0]] += delta
         else:

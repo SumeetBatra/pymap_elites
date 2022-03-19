@@ -1,8 +1,9 @@
 import os
 import glob
 import json
+import numpy as np
 from map_elites import common as cm
-
+from pynvml import *
 
 def get_checkpoints(checkpoints_dir):
     checkpoints = glob.glob(os.path.join(checkpoints_dir, 'checkpoint_*'))
@@ -31,3 +32,12 @@ def save_cfg(cfg, save_path):
     with open(cfg_file, 'w') as json_file:
         json.dump(cfg, json_file, indent=2)
 
+
+def get_least_busy_gpu(num_gpus):
+    gpu_ids = [i for i in range(num_gpus)]
+    free_mem = []
+    for gpu_id in gpu_ids:
+        h = nvmlDeviceGetHandleByIndex(gpu_id)
+        info = nvmlDeviceGetMemoryInfo(h)
+        free_mem.append(info.free)
+    return np.argmax(free_mem)

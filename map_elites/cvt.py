@@ -49,7 +49,7 @@ import shutil
 import glob
 import torch
 from sklearn.neighbors import KDTree
-from models.bipedal_walker_model import model_factory, device
+from models.bipedal_walker_model import model_factory
 from itertools import count
 
 from map_elites import common as cm
@@ -119,7 +119,10 @@ def compute_nn(cfg,
         if len(archive) <= cfg['random_init']:  # initialize a |random_init| number of actors
             log.debug("Initializing the neural network actors' weights from scratch")
             for i in range(0, cfg['random_init_batch'] + 1):
-                actor = model_factory(hidden_size=128).to_device(device)
+                gpu_id = get_least_busy_gpu(cfg['num_gpus'])
+                device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
+                actor = model_factory(hidden_size=128, device=device).to(device)
+                log.debug(f'New actor going to gpu {gpu_id}')
                 to_evaluate += [actor]
         else:  # variation/selection loop
             log.debug("Selection/Variation loop of existing actors")

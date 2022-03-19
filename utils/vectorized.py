@@ -6,7 +6,6 @@ import numpy as np
 from faster_fifo import Queue
 from multiprocessing import Process, Event, Pipe
 from utils.logger import log
-from models.bipedal_walker_model import device
 
 
 # adapted from: https://github.com/ollenilsson19/PGA-MAP-Elites/blob/master/vectorized_env.py
@@ -44,7 +43,7 @@ def parallel_worker(process_id,
                 obs_arr, rew_arr, dones_arr = [], [], []
                 rewards, info = 0, None
                 while not done:
-                    obs = torch.from_numpy(obs).to(device)
+                    obs = torch.from_numpy(obs).to(actor.device)
                     action = actor(obs).cpu().detach().numpy()
                     obs, rew, done, info = env.step(action)
                     obs_arr.append(obs)

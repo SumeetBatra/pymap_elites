@@ -14,6 +14,7 @@ from utils.logger import log, config_wandb
 from wrappers.BDWrapper import BDWrapper
 from map_elites.variation_operators import VariationOperator
 from map_elites.cvt import compute_nn
+from pynvml import *
 
 
 # CLI args
@@ -39,12 +40,13 @@ def parse_args(argv=None):
     parser.add_argument('--random_init_batch', type=int, default=100, help='batch for random initialization')
     parser.add_argument('--cvt_use_cache', type=str2bool, default=True, help='do we cache results of CVT and reuse?')
     parser.add_argument('--max_evals', type=int, default=1e6, help='Total number of evaluations to perform')
-    parser.add_argument('--save_path', default='./', type=str, help='path where to save results')
+    parser.add_argument('--save_path', default='./results', type=str, help='path where to save results')
     parser.add_argument('--dim_map', default=2, type=int, help='Dimensionality of the behavior space. Default is 2 for bipedal walker (obviously)')
     parser.add_argument('--save_period', default=10000, type=int, help='How many evaluations b/w saving archives')
     parser.add_argument('--keep_checkpoints', default=2, type=int, help='Number of checkpoints of the elites to keep during training')
     parser.add_argument('--checkpoint_dir', default='./checkpoints', type=str, help='Where to save the checkpoints')
     parser.add_argument('--cp_save_period', default=1000000, type=int, help='How many evaluations b/w saving checkpoints')
+    parser.add_argument('--num_gpus', default=1, type=int, help='Number of gpus available on your system')
 
     # args for cross over and mutation of agent params
     parser.add_argument('--mutation_op', default=None, type=str, choices=['polynomial_mutation', 'gaussian_mutation', 'uniform_mutation'], help='Type of mutation to perform. Leave as None to do no mutations')
@@ -84,6 +86,8 @@ def main():
 
     args = parse_args()
     cfg = vars(args)
+
+    nvmlInit()  # for tracking gpu resources
 
     # log hyperparams to wandb
     config_wandb(batch_size=cfg['batch_size'], max_evals=cfg['max_evals'])
